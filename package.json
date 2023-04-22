@@ -9,10 +9,10 @@
   "main": "index.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder build",
-    "dist:win": "npm run dist -- -w --publish always",
-    "dist:mac": "npm run dist -- -m --publish always",
-    "dist:linux": "npm run dist -- -l --publish always",
+    "dist": "electron-builder build --publish always",
+    "dist:win": "npm run dist -- -w",
+    "dist:mac": "npm run dist -- -m",
+    "dist:linux": "npm run dist -- -l",
     "lint": "eslint --config .eslintrc.json ."
   },
   "engines": {
