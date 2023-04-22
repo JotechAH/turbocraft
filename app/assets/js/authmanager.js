@@ -29,9 +29,9 @@ const log = LoggerUtil.getLogger('AuthManager')
  * @param {string} password The account password.
  * @returns {Promise.<Object>} Promise which resolves the resolved authenticated account object.
  */
-exports.addMojangAccount = async function(username, password) {
+exports.addMojangAccount = async function(username) {
     try {
-        const response = await MojangRestAPI.authenticate(username, password, ConfigManager.getClientToken())
+        /**const response = await MojangRestAPI.authenticate(username, password, ConfigManager.getClientToken())
         console.log(response)
         if(response.responseStatus === RestResponseStatus.SUCCESS) {
 
@@ -49,7 +49,13 @@ exports.addMojangAccount = async function(username, password) {
 
         } else {
             return Promise.reject(mojangErrorDisplayable(response.mojangErrorCode))
+        }**/
+        const ret = ConfigManager.addMojangAuthAccount('99999999', '999999999', username, username)
+        if(ConfigManager.getClientToken() == null){
+            ConfigManager.setClientToken('999999999')
         }
+        ConfigManager.save()
+        return ret
         
     } catch (err){
         log.error(err)
@@ -129,34 +135,6 @@ function calculateExpiryDate(nowMs, epiresInS) {
 }
 
 /**
- * Add a Microsoft account. This will pass the provided auth code to Mojang's OAuth2.0 flow.
- * The resultant data will be stored as an auth account in the configuration database.
- * 
- * @param {string} authCode The authCode obtained from microsoft.
- * @returns {Promise.<Object>} Promise which resolves the resolved authenticated account object.
- */
-exports.addMicrosoftAccount = async function(authCode) {
-
-    const fullAuth = await fullMicrosoftAuthFlow(authCode, AUTH_MODE.FULL)
-
-    // Advance expiry by 10 seconds to avoid close calls.
-    const now = new Date().getTime()
-
-    const ret = ConfigManager.addMicrosoftAuthAccount(
-        fullAuth.mcProfile.id,
-        fullAuth.mcToken.access_token,
-        fullAuth.mcProfile.name,
-        calculateExpiryDate(now, fullAuth.mcToken.expires_in),
-        fullAuth.accessToken.access_token,
-        fullAuth.accessToken.refresh_token,
-        calculateExpiryDate(now, fullAuth.accessToken.expires_in)
-    )
-    ConfigManager.save()
-
-    return ret
-}
-
-/**
  * Remove a Mojang account. This will invalidate the access token associated
  * with the account and then remove it from the database.
  * 
@@ -164,31 +142,6 @@ exports.addMicrosoftAccount = async function(authCode) {
  * @returns {Promise.<void>} Promise which resolves to void when the action is complete.
  */
 exports.removeMojangAccount = async function(uuid){
-    try {
-        const authAcc = ConfigManager.getAuthAccount(uuid)
-        const response = await MojangRestAPI.invalidate(authAcc.accessToken, ConfigManager.getClientToken())
-        if(response.responseStatus === RestResponseStatus.SUCCESS) {
-            ConfigManager.removeAuthAccount(uuid)
-            ConfigManager.save()
-            return Promise.resolve()
-        } else {
-            log.error('Error while removing account', response.error)
-            return Promise.reject(response.error)
-        }
-    } catch (err){
-        log.error('Error while removing account', err)
-        return Promise.reject(err)
-    }
-}
-
-/**
- * Remove a Microsoft account. It is expected that the caller will invoke the OAuth logout
- * through the ipc renderer.
- * 
- * @param {string} uuid The UUID of the account to be removed.
- * @returns {Promise.<void>} Promise which resolves to void when the action is complete.
- */
-exports.removeMicrosoftAccount = async function(uuid){
     try {
         ConfigManager.removeAuthAccount(uuid)
         ConfigManager.save()
@@ -198,6 +151,7 @@ exports.removeMicrosoftAccount = async function(uuid){
         return Promise.reject(err)
     }
 }
+
 
 /**
  * Validate the selected account with Mojang's authserver. If the account is not valid,

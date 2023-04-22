@@ -1,14 +1,10 @@
 {
-  "name": "helioslauncher",
-  "version": "2.0.4",
-  "productName": "Helios Launcher",
+  "name": "turbocraft",
+  "version": "0.0.1",
+  "productName": "Turbocraft",
   "description": "Modded Minecraft Launcher",
-  "author": "Daniel Scalzi (https://github.com/dscalzi/)",
+  "author": "Jotech",
   "license": "UNLICENSED",
-  "homepage": "https://github.com/dscalzi/HeliosLauncher",
-  "bugs": {
-    "url": "https://github.com/dscalzi/HeliosLauncher/issues"
-  },
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -25,7 +21,6 @@
   "dependencies": {
     "@electron/remote": "^2.0.8",
     "adm-zip": "^0.5.9",
-    "discord-rpc-patch": "^4.0.1",
     "ejs": "^3.1.9",
     "ejs-electron": "^2.1.1",
     "electron-updater": "^5.3.0",
@@ -37,13 +32,13 @@
     "jquery": "^3.6.4",
     "semver": "^7.4.0"
   },
+  "repository": {
+    "type" : "git",
+    "url" : "https://github.com/JotechAH/turbocraft.git"
+  },
   "devDependencies": {
     "electron": "^24.1.1",
     "electron-builder": "^23.6.0",
     "eslint": "^8.38.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dscalzi/HeliosLauncher.git"
   }
 }

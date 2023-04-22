@@ -1,8 +1,11 @@
-appId: 'helioslauncher'
-productName: 'Helios Launcher'
+appId: 'turbocraft'
+productName: 'Turbocraft'
 artifactName: '${productName}-setup-${version}.${ext}'
-
-copyright: 'Copyright © 2018-2022 Daniel Scalzi'
+publish:
+  provider: github
+  token: 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
+  
+copyright: 'Copyright © 2023-2023 Jotech'
 
 asar: true
 compression: 'maximum'

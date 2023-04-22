@@ -323,10 +323,7 @@ function settingsSaveDisabled(v){
 
 function fullSettingsSave() {
     saveSettingsValues()
-    saveModConfiguration()
     ConfigManager.save()
-    saveDropinModConfiguration()
-    saveShaderpackSettings()
 }
 
 /* Closes the settings view and saves all data. */
@@ -339,9 +336,6 @@ settingsNavDone.onclick = () => {
  * Account Management Tab
  */
 
-const msftLoginLogger = LoggerUtil.getLogger('Microsoft Login')
-const msftLogoutLogger = LoggerUtil.getLogger('Microsoft Logout')
-
 // Bind the add mojang account button.
 document.getElementById('settingsAddMojangAccount').onclick = (e) => {
     switchView(getCurrentView(), VIEWS.login, 500, 500, () => {
@@ -350,102 +344,6 @@ document.getElementById('settingsAddMojangAccount').onclick = (e) => {
         loginCancelEnabled(true)
     })
 }
-
-// Bind the add microsoft account button.
-document.getElementById('settingsAddMicrosoftAccount').onclick = (e) => {
-    switchView(getCurrentView(), VIEWS.waiting, 500, 500, () => {
-        ipcRenderer.send(MSFT_OPCODE.OPEN_LOGIN, VIEWS.settings, VIEWS.settings)
-    })
-}
-
-// Bind reply for Microsoft Login.
-ipcRenderer.on(MSFT_OPCODE.REPLY_LOGIN, (_, ...arguments_) => {
-    if (arguments_[0] === MSFT_REPLY_TYPE.ERROR) {
-
-        const viewOnClose = arguments_[2]
-        console.log(arguments_)
-        switchView(getCurrentView(), viewOnClose, 500, 500, () => {
-
-            if(arguments_[1] === MSFT_ERROR.NOT_FINISHED) {
-                // User cancelled.
-                msftLoginLogger.info('Login cancelled by user.')
-                return
-            }
-
-            // Unexpected error.
-            setOverlayContent(
-                'Something Went Wrong',
-                'Microsoft authentication failed. Please try again.',
-                'OK'
-            )
-            setOverlayHandler(() => {
-                toggleOverlay(false)
-            })
-            toggleOverlay(true)
-        })
-    } else if(arguments_[0] === MSFT_REPLY_TYPE.SUCCESS) {
-        const queryMap = arguments_[1]
-        const viewOnClose = arguments_[2]
-
-        // Error from request to Microsoft.
-        if (Object.prototype.hasOwnProperty.call(queryMap, 'error')) {
-            switchView(getCurrentView(), viewOnClose, 500, 500, () => {
-                // TODO Dont know what these errors are. Just show them I guess.
-                // This is probably if you messed up the app registration with Azure.      
-                let error = queryMap.error // Error might be 'access_denied' ?
-                let errorDesc = queryMap.error_description
-                console.log('Error getting authCode, is Azure application registered correctly?')
-                console.log(error)
-                console.log(errorDesc)
-                console.log('Full query map: ', queryMap)
-                setOverlayContent(
-                    error,
-                    errorDesc,
-                    'OK'
-                )
-                setOverlayHandler(() => {
-                    toggleOverlay(false)
-                })
-                toggleOverlay(true)
-
-            })
-        } else {
-
-            msftLoginLogger.info('Acquired authCode, proceeding with authentication.')
-
-            const authCode = queryMap.code
-            AuthManager.addMicrosoftAccount(authCode).then(value => {
-                updateSelectedAccount(value)
-                switchView(getCurrentView(), viewOnClose, 500, 500, async () => {
-                    await prepareSettings()
-                })
-            })
-                .catch((displayableError) => {
-
-                    let actualDisplayableError
-                    if(isDisplayableError(displayableError)) {
-                        msftLoginLogger.error('Error while logging in.', displayableError)
-                        actualDisplayableError = displayableError
-                    } else {
-                        // Uh oh.
-                        msftLoginLogger.error('Unhandled error during login.', displayableError)
-                        actualDisplayableError = {
-                            title: 'Unknown Error During Login',
-                            desc: 'An unknown error has occurred. Please see the console for details.'
-                        }
-                    }
-
-                    switchView(getCurrentView(), viewOnClose, 500, 500, () => {
-                        setOverlayContent(actualDisplayableError.title, actualDisplayableError.desc, Lang.queryJS('login.tryAgain'))
-                        setOverlayHandler(() => {
-                            toggleOverlay(false)
-                        })
-                        toggleOverlay(true)
-                    })
-                })
-        }
-    }
-})
 
 /**
  * Bind functionality for the account selection buttons. If another account
@@ -516,89 +414,15 @@ function processLogOut(val, isLastAccount){
     const uuid = parent.getAttribute('uuid')
     const prevSelAcc = ConfigManager.getSelectedAccount()
     const targetAcc = ConfigManager.getAuthAccount(uuid)
-    if(targetAcc.type === 'microsoft') {
-        msAccDomElementCache = parent
-        switchView(getCurrentView(), VIEWS.waiting, 500, 500, () => {
-            ipcRenderer.send(MSFT_OPCODE.OPEN_LOGOUT, uuid, isLastAccount)
-        })
-    } else {
-        AuthManager.removeMojangAccount(uuid).then(() => {
-            if(!isLastAccount && uuid === prevSelAcc.uuid){
-                const selAcc = ConfigManager.getSelectedAccount()
-                refreshAuthAccountSelected(selAcc.uuid)
-                updateSelectedAccount(selAcc)
-                validateSelectedAccount()
-            }
-            if(isLastAccount) {
-                loginOptionsCancelEnabled(false)
-                loginOptionsViewOnLoginSuccess = VIEWS.settings
-                loginOptionsViewOnLoginCancel = VIEWS.loginOptions
-                switchView(getCurrentView(), VIEWS.loginOptions)
-            }
-        })
-        $(parent).fadeOut(250, () => {
-            parent.remove()
-        })
-    }
+    AuthManager.removeMojangAccount(uuid).then(() => {
+        loginViewOnSuccess = VIEWS.settings
+        loginViewOnCancel = VIEWS.login
+        switchView(getCurrentView(), VIEWS.login)
+    })
+    $(parent).fadeOut(250, () => {
+        parent.remove()
+    })
 }
-
-// Bind reply for Microsoft Logout.
-ipcRenderer.on(MSFT_OPCODE.REPLY_LOGOUT, (_, ...arguments_) => {
-    if (arguments_[0] === MSFT_REPLY_TYPE.ERROR) {
-        switchView(getCurrentView(), VIEWS.settings, 500, 500, () => {
-
-            if(arguments_.length > 1 && arguments_[1] === MSFT_ERROR.NOT_FINISHED) {
-                // User cancelled.
-                msftLogoutLogger.info('Logout cancelled by user.')
-                return
-            }
-
-            // Unexpected error.
-            setOverlayContent(
-                'Something Went Wrong',
-                'Microsoft logout failed. Please try again.',
-                'OK'
-            )
-            setOverlayHandler(() => {
-                toggleOverlay(false)
-            })
-            toggleOverlay(true)
-        })
-    } else if(arguments_[0] === MSFT_REPLY_TYPE.SUCCESS) {
-        
-        const uuid = arguments_[1]
-        const isLastAccount = arguments_[2]
-        const prevSelAcc = ConfigManager.getSelectedAccount()
-
-        msftLogoutLogger.info('Logout Successful. uuid:', uuid)
-        
-        AuthManager.removeMicrosoftAccount(uuid)
-            .then(() => {
-                if(!isLastAccount && uuid === prevSelAcc.uuid){
-                    const selAcc = ConfigManager.getSelectedAccount()
-                    refreshAuthAccountSelected(selAcc.uuid)
-                    updateSelectedAccount(selAcc)
-                    validateSelectedAccount()
-                }
-                if(isLastAccount) {
-                    loginOptionsCancelEnabled(false)
-                    loginOptionsViewOnLoginSuccess = VIEWS.settings
-                    loginOptionsViewOnLoginCancel = VIEWS.loginOptions
-                    switchView(getCurrentView(), VIEWS.loginOptions)
-                }
-                if(msAccDomElementCache) {
-                    msAccDomElementCache.remove()
-                    msAccDomElementCache = null
-                }
-            })
-            .finally(() => {
-                if(!isLastAccount) {
-                    switchView(getCurrentView(), VIEWS.settings, 500, 500)
-                }
-            })
-
-    }
-})
 
 /**
  * Refreshes the status of the selected account on the auth account
@@ -621,7 +445,6 @@ function refreshAuthAccountSelected(uuid){
     })
 }
 
-const settingsCurrentMicrosoftAccounts = document.getElementById('settingsCurrentMicrosoftAccounts')
 const settingsCurrentMojangAccounts = document.getElementById('settingsCurrentMojangAccounts')
 
 /**
@@ -635,25 +458,17 @@ function populateAuthAccounts(){
     }
     const selectedUUID = ConfigManager.getSelectedAccount().uuid
 
-    let microsoftAuthAccountStr = ''
     let mojangAuthAccountStr = ''
 
     authKeys.forEach((val) => {
         const acc = authAccounts[val]
 
         const accHtml = `<div class="settingsAuthAccount" uuid="${acc.uuid}">
-            <div class="settingsAuthAccountLeft">
-                <img class="settingsAuthAccountImage" alt="${acc.displayName}" src="https://mc-heads.net/body/${acc.uuid}/60">
-            </div>
             <div class="settingsAuthAccountRight">
                 <div class="settingsAuthAccountDetails">
                     <div class="settingsAuthAccountDetailPane">
                         <div class="settingsAuthAccountDetailTitle">Username</div>
                         <div class="settingsAuthAccountDetailValue">${acc.displayName}</div>
-                    </div>
-                    <div class="settingsAuthAccountDetailPane">
-                        <div class="settingsAuthAccountDetailTitle">UUID</div>
-                        <div class="settingsAuthAccountDetailValue">${acc.uuid}</div>
                     </div>
                 </div>
                 <div class="settingsAuthAccountActions">
@@ -665,15 +480,10 @@ function populateAuthAccounts(){
             </div>
         </div>`
 
-        if(acc.type === 'microsoft') {
-            microsoftAuthAccountStr += accHtml
-        } else {
-            mojangAuthAccountStr += accHtml
-        }
+        mojangAuthAccountStr += accHtml
 
     })
 
-    settingsCurrentMicrosoftAccounts.innerHTML = microsoftAuthAccountStr
     settingsCurrentMojangAccounts.innerHTML = mojangAuthAccountStr
 }
 
@@ -703,445 +513,6 @@ document.getElementById('settingsGameHeight').addEventListener('keydown', (e) =>
         e.preventDefault()
     }
 })
-
-/**
- * Mods Tab
- */
-
-const settingsModsContainer = document.getElementById('settingsModsContainer')
-
-/**
- * Resolve and update the mods on the UI.
- */
-async function resolveModsForUI(){
-    const serv = ConfigManager.getSelectedServer()
-
-    const distro = await DistroAPI.getDistribution()
-    const servConf = ConfigManager.getModConfiguration(serv)
-
-    const modStr = parseModulesForUI(distro.getServerById(serv).modules, false, servConf.mods)
-
-    document.getElementById('settingsReqModsContent').innerHTML = modStr.reqMods
-    document.getElementById('settingsOptModsContent').innerHTML = modStr.optMods
-}
-
-/**
- * Recursively build the mod UI elements.
- * 
- * @param {Object[]} mdls An array of modules to parse.
- * @param {boolean} submodules Whether or not we are parsing submodules.
- * @param {Object} servConf The server configuration object for this module level.
- */
-function parseModulesForUI(mdls, submodules, servConf){
-
-    let reqMods = ''
-    let optMods = ''
-
-    for(const mdl of mdls){
-
-        if(mdl.rawModule.type === Type.ForgeMod || mdl.rawModule.type === Type.LiteMod || mdl.rawModule.type === Type.LiteLoader){
-
-            if(mdl.getRequired().value){
-
-                reqMods += `<div id="${mdl.getVersionlessMavenIdentifier()}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" enabled>
-                    <div class="settingsModContent">
-                        <div class="settingsModMainWrapper">
-                            <div class="settingsModStatus"></div>
-                            <div class="settingsModDetails">
-                                <span class="settingsModName">${mdl.rawModule.name}</span>
-                                <span class="settingsModVersion">v${mdl.mavenComponents.version}</span>
-                            </div>
-                        </div>
-                        <label class="toggleSwitch" reqmod>
-                            <input type="checkbox" checked>
-                            <span class="toggleSwitchSlider"></span>
-                        </label>
-                    </div>
-                    ${mdl.subModules.length > 0 ? `<div class="settingsSubModContainer">
-                        ${Object.values(parseModulesForUI(mdl.subModules, true, servConf[mdl.getVersionlessMavenIdentifier()])).join('')}
-                    </div>` : ''}
-                </div>`
-
-            } else {
-
-                const conf = servConf[mdl.getVersionlessMavenIdentifier()]
-                const val = typeof conf === 'object' ? conf.value : conf
-
-                optMods += `<div id="${mdl.getVersionlessMavenIdentifier()}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" ${val ? 'enabled' : ''}>
-                    <div class="settingsModContent">
-                        <div class="settingsModMainWrapper">
-                            <div class="settingsModStatus"></div>
-                            <div class="settingsModDetails">
-                                <span class="settingsModName">${mdl.rawModule.name}</span>
-                                <span class="settingsModVersion">v${mdl.mavenComponents.version}</span>
-                            </div>
-                        </div>
-                        <label class="toggleSwitch">
-                            <input type="checkbox" formod="${mdl.getVersionlessMavenIdentifier()}" ${val ? 'checked' : ''}>
-                            <span class="toggleSwitchSlider"></span>
-                        </label>
-                    </div>
-                    ${mdl.subModules.length > 0 ? `<div class="settingsSubModContainer">
-                        ${Object.values(parseModulesForUI(mdl.subModules, true, conf.mods)).join('')}
-                    </div>` : ''}
-                </div>`
-
-            }
-        }
-    }
-
-    return {
-        reqMods,
-        optMods
-    }
-
-}
-
-/**
- * Bind functionality to mod config toggle switches. Switching the value
- * will also switch the status color on the left of the mod UI.
- */
-function bindModsToggleSwitch(){
-    const sEls = settingsModsContainer.querySelectorAll('[formod]')
-    Array.from(sEls).map((v, index, arr) => {
-        v.onchange = () => {
-            if(v.checked) {
-                document.getElementById(v.getAttribute('formod')).setAttribute('enabled', '')
-            } else {
-                document.getElementById(v.getAttribute('formod')).removeAttribute('enabled')
-            }
-        }
-    })
-}
-
-
-/**
- * Save the mod configuration based on the UI values.
- */
-function saveModConfiguration(){
-    const serv = ConfigManager.getSelectedServer()
-    const modConf = ConfigManager.getModConfiguration(serv)
-    modConf.mods = _saveModConfiguration(modConf.mods)
-    ConfigManager.setModConfiguration(serv, modConf)
-}
-
-/**
- * Recursively save mod config with submods.
- * 
- * @param {Object} modConf Mod config object to save.
- */
-function _saveModConfiguration(modConf){
-    for(let m of Object.entries(modConf)){
-        const tSwitch = settingsModsContainer.querySelectorAll(`[formod='${m[0]}']`)
-        if(!tSwitch[0].hasAttribute('dropin')){
-            if(typeof m[1] === 'boolean'){
-                modConf[m[0]] = tSwitch[0].checked
-            } else {
-                if(m[1] != null){
-                    if(tSwitch.length > 0){
-                        modConf[m[0]].value = tSwitch[0].checked
-                    }
-                    modConf[m[0]].mods = _saveModConfiguration(modConf[m[0]].mods)
-                }
-            }
-        }
-    }
-    return modConf
-}
-
-// Drop-in mod elements.
-
-let CACHE_SETTINGS_MODS_DIR
-let CACHE_DROPIN_MODS
-
-/**
- * Resolve any located drop-in mods for this server and
- * populate the results onto the UI.
- */
-async function resolveDropinModsForUI(){
-    const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-    CACHE_SETTINGS_MODS_DIR = path.join(ConfigManager.getInstanceDirectory(), serv.rawServer.id, 'mods')
-    CACHE_DROPIN_MODS = DropinModUtil.scanForDropinMods(CACHE_SETTINGS_MODS_DIR, serv.rawServer.minecraftVersion)
-
-    let dropinMods = ''
-
-    for(dropin of CACHE_DROPIN_MODS){
-        dropinMods += `<div id="${dropin.fullName}" class="settingsBaseMod settingsDropinMod" ${!dropin.disabled ? 'enabled' : ''}>
-                    <div class="settingsModContent">
-                        <div class="settingsModMainWrapper">
-                            <div class="settingsModStatus"></div>
-                            <div class="settingsModDetails">
-                                <span class="settingsModName">${dropin.name}</span>
-                                <div class="settingsDropinRemoveWrapper">
-                                    <button class="settingsDropinRemoveButton" remmod="${dropin.fullName}">Remove</button>
-                                </div>
-                            </div>
-                        </div>
-                        <label class="toggleSwitch">
-                            <input type="checkbox" formod="${dropin.fullName}" dropin ${!dropin.disabled ? 'checked' : ''}>
-                            <span class="toggleSwitchSlider"></span>
-                        </label>
-                    </div>
-                </div>`
-    }
-
-    document.getElementById('settingsDropinModsContent').innerHTML = dropinMods
-}
-
-/**
- * Bind the remove button for each loaded drop-in mod.
- */
-function bindDropinModsRemoveButton(){
-    const sEls = settingsModsContainer.querySelectorAll('[remmod]')
-    Array.from(sEls).map((v, index, arr) => {
-        v.onclick = async () => {
-            const fullName = v.getAttribute('remmod')
-            const res = await DropinModUtil.deleteDropinMod(CACHE_SETTINGS_MODS_DIR, fullName)
-            if(res){
-                document.getElementById(fullName).remove()
-            } else {
-                setOverlayContent(
-                    `Failed to Delete<br>Drop-in Mod ${fullName}`,
-                    'Make sure the file is not in use and try again.',
-                    'Okay'
-                )
-                setOverlayHandler(null)
-                toggleOverlay(true)
-            }
-        }
-    })
-}
-
-/**
- * Bind functionality to the file system button for the selected
- * server configuration.
- */
-function bindDropinModFileSystemButton(){
-    const fsBtn = document.getElementById('settingsDropinFileSystemButton')
-    fsBtn.onclick = () => {
-        DropinModUtil.validateDir(CACHE_SETTINGS_MODS_DIR)
-        shell.openPath(CACHE_SETTINGS_MODS_DIR)
-    }
-    fsBtn.ondragenter = e => {
-        e.dataTransfer.dropEffect = 'move'
-        fsBtn.setAttribute('drag', '')
-        e.preventDefault()
-    }
-    fsBtn.ondragover = e => {
-        e.preventDefault()
-    }
-    fsBtn.ondragleave = e => {
-        fsBtn.removeAttribute('drag')
-    }
-
-    fsBtn.ondrop = async e => {
-        fsBtn.removeAttribute('drag')
-        e.preventDefault()
-
-        DropinModUtil.addDropinMods(e.dataTransfer.files, CACHE_SETTINGS_MODS_DIR)
-        await reloadDropinMods()
-    }
-}
-
-/**
- * Save drop-in mod states. Enabling and disabling is just a matter
- * of adding/removing the .disabled extension.
- */
-function saveDropinModConfiguration(){
-    for(dropin of CACHE_DROPIN_MODS){
-        const dropinUI = document.getElementById(dropin.fullName)
-        if(dropinUI != null){
-            const dropinUIEnabled = dropinUI.hasAttribute('enabled')
-            if(DropinModUtil.isDropinModEnabled(dropin.fullName) != dropinUIEnabled){
-                DropinModUtil.toggleDropinMod(CACHE_SETTINGS_MODS_DIR, dropin.fullName, dropinUIEnabled).catch(err => {
-                    if(!isOverlayVisible()){
-                        setOverlayContent(
-                            'Failed to Toggle<br>One or More Drop-in Mods',
-                            err.message,
-                            'Okay'
-                        )
-                        setOverlayHandler(null)
-                        toggleOverlay(true)
-                    }
-                })
-            }
-        }
-    }
-}
-
-// Refresh the drop-in mods when F5 is pressed.
-// Only active on the mods tab.
-document.addEventListener('keydown', async (e) => {
-    if(getCurrentView() === VIEWS.settings && selectedSettingsTab === 'settingsTabMods'){
-        if(e.key === 'F5'){
-            await reloadDropinMods()
-            saveShaderpackSettings()
-            await resolveShaderpacksForUI()
-        }
-    }
-})
-
-async function reloadDropinMods(){
-    await resolveDropinModsForUI()
-    bindDropinModsRemoveButton()
-    bindDropinModFileSystemButton()
-    bindModsToggleSwitch()
-}
-
-// Shaderpack
-
-let CACHE_SETTINGS_INSTANCE_DIR
-let CACHE_SHADERPACKS
-let CACHE_SELECTED_SHADERPACK
-
-/**
- * Load shaderpack information.
- */
-async function resolveShaderpacksForUI(){
-    const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-    CACHE_SETTINGS_INSTANCE_DIR = path.join(ConfigManager.getInstanceDirectory(), serv.rawServer.id)
-    CACHE_SHADERPACKS = DropinModUtil.scanForShaderpacks(CACHE_SETTINGS_INSTANCE_DIR)
-    CACHE_SELECTED_SHADERPACK = DropinModUtil.getEnabledShaderpack(CACHE_SETTINGS_INSTANCE_DIR)
-
-    setShadersOptions(CACHE_SHADERPACKS, CACHE_SELECTED_SHADERPACK)
-}
-
-function setShadersOptions(arr, selected){
-    const cont = document.getElementById('settingsShadersOptions')
-    cont.innerHTML = ''
-    for(let opt of arr) {
-        const d = document.createElement('DIV')
-        d.innerHTML = opt.name
-        d.setAttribute('value', opt.fullName)
-        if(opt.fullName === selected) {
-            d.setAttribute('selected', '')
-            document.getElementById('settingsShadersSelected').innerHTML = opt.name
-        }
-        d.addEventListener('click', function(e) {
-            this.parentNode.previousElementSibling.innerHTML = this.innerHTML
-            for(let sib of this.parentNode.children){
-                sib.removeAttribute('selected')
-            }
-            this.setAttribute('selected', '')
-            closeSettingsSelect()
-        })
-        cont.appendChild(d)
-    }
-}
-
-function saveShaderpackSettings(){
-    let sel = 'OFF'
-    for(let opt of document.getElementById('settingsShadersOptions').childNodes){
-        if(opt.hasAttribute('selected')){
-            sel = opt.getAttribute('value')
-        }
-    }
-    DropinModUtil.setEnabledShaderpack(CACHE_SETTINGS_INSTANCE_DIR, sel)
-}
-
-function bindShaderpackButton() {
-    const spBtn = document.getElementById('settingsShaderpackButton')
-    spBtn.onclick = () => {
-        const p = path.join(CACHE_SETTINGS_INSTANCE_DIR, 'shaderpacks')
-        DropinModUtil.validateDir(p)
-        shell.openPath(p)
-    }
-    spBtn.ondragenter = e => {
-        e.dataTransfer.dropEffect = 'move'
-        spBtn.setAttribute('drag', '')
-        e.preventDefault()
-    }
-    spBtn.ondragover = e => {
-        e.preventDefault()
-    }
-    spBtn.ondragleave = e => {
-        spBtn.removeAttribute('drag')
-    }
-
-    spBtn.ondrop = async e => {
-        spBtn.removeAttribute('drag')
-        e.preventDefault()
-
-        DropinModUtil.addShaderpacks(e.dataTransfer.files, CACHE_SETTINGS_INSTANCE_DIR)
-        saveShaderpackSettings()
-        await resolveShaderpacksForUI()
-    }
-}
-
-// Server status bar functions.
-
-/**
- * Load the currently selected server information onto the mods tab.
- */
-async function loadSelectedServerOnModsTab(){
-    const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-
-    for(const el of document.getElementsByClassName('settingsSelServContent')) {
-        el.innerHTML = `
-            <img class="serverListingImg" src="${serv.rawServer.icon}"/>
-            <div class="serverListingDetails">
-                <span class="serverListingName">${serv.rawServer.name}</span>
-                <span class="serverListingDescription">${serv.rawServer.description}</span>
-                <div class="serverListingInfo">
-                    <div class="serverListingVersion">${serv.rawServer.minecraftVersion}</div>
-                    <div class="serverListingRevision">${serv.rawServer.version}</div>
-                    ${serv.rawServer.mainServer ? `<div class="serverListingStarWrapper">
-                        <svg id="Layer_1" viewBox="0 0 107.45 104.74" width="20px" height="20px">
-                            <defs>
-                                <style>.cls-1{fill:#fff;}.cls-2{fill:none;stroke:#fff;stroke-miterlimit:10;}</style>
-                            </defs>
-                            <path class="cls-1" d="M100.93,65.54C89,62,68.18,55.65,63.54,52.13c2.7-5.23,18.8-19.2,28-27.55C81.36,31.74,63.74,43.87,58.09,45.3c-2.41-5.37-3.61-26.52-4.37-39-.77,12.46-2,33.64-4.36,39-5.7-1.46-23.3-13.57-33.49-20.72,9.26,8.37,25.39,22.36,28,27.55C39.21,55.68,18.47,62,6.52,65.55c12.32-2,33.63-6.06,39.34-4.9-.16,5.87-8.41,26.16-13.11,37.69,6.1-10.89,16.52-30.16,21-33.9,4.5,3.79,14.93,23.09,21,34C70,86.84,61.73,66.48,61.59,60.65,67.36,59.49,88.64,63.52,100.93,65.54Z"/>
-                            <circle class="cls-2" cx="53.73" cy="53.9" r="38"/>
-                        </svg>
-                        <span class="serverListingStarTooltip">Main Server</span>
-                    </div>` : ''}
-                </div>
-            </div>
-        `
-    }
-}
-
-// Bind functionality to the server switch button.
-Array.from(document.getElementsByClassName('settingsSwitchServerButton')).forEach(el => {
-    el.addEventListener('click', async e => {
-        e.target.blur()
-        await toggleServerSelection(true)
-    })
-})
-
-/**
- * Save mod configuration for the current selected server.
- */
-function saveAllModConfigurations(){
-    saveModConfiguration()
-    ConfigManager.save()
-    saveDropinModConfiguration()
-}
-
-/**
- * Function to refresh the current tab whenever the selected
- * server is changed.
- */
-function animateSettingsTabRefresh(){
-    $(`#${selectedSettingsTab}`).fadeOut(500, async () => {
-        await prepareSettings()
-        $(`#${selectedSettingsTab}`).fadeIn(500)
-    })
-}
-
-/**
- * Prepare the Mods tab for display.
- */
-async function prepareModsTab(first){
-    await resolveModsForUI()
-    await resolveDropinModsForUI()
-    await resolveShaderpacksForUI()
-    bindDropinModsRemoveButton()
-    bindDropinModFileSystemButton()
-    bindShaderpackButton()
-    bindModsToggleSwitch()
-    await loadSelectedServerOnModsTab()
-}
 
 /**
  * Java Tab
@@ -1432,15 +803,9 @@ function isPrerelease(version){
  */
 function populateVersionInformation(version, valueElement, titleElement, checkElement){
     valueElement.innerHTML = version
-    if(isPrerelease(version)){
-        titleElement.innerHTML = 'Pre-release'
-        titleElement.style.color = '#ff886d'
-        checkElement.style.background = '#ff886d'
-    } else {
-        titleElement.innerHTML = 'Stable Release'
-        titleElement.style.color = null
-        checkElement.style.background = null
-    }
+    titleElement.innerHTML = 'Stable Release'
+    titleElement.style.color = null
+    checkElement.style.background = null
 }
 
 /**
@@ -1450,35 +815,6 @@ function populateAboutVersionInformation(){
     populateVersionInformation(remote.app.getVersion(), document.getElementById('settingsAboutCurrentVersionValue'), document.getElementById('settingsAboutCurrentVersionTitle'), document.getElementById('settingsAboutCurrentVersionCheck'))
 }
 
-/**
- * Fetches the GitHub atom release feed and parses it for the release notes
- * of the current version. This value is displayed on the UI.
- */
-function populateReleaseNotes(){
-    $.ajax({
-        url: 'https://github.com/dscalzi/HeliosLauncher/releases.atom',
-        success: (data) => {
-            const version = 'v' + remote.app.getVersion()
-            const entries = $(data).find('entry')
-            
-            for(let i=0; i<entries.length; i++){
-                const entry = $(entries[i])
-                let id = entry.find('id').text()
-                id = id.substring(id.lastIndexOf('/')+1)
-
-                if(id === version){
-                    settingsAboutChangelogTitle.innerHTML = entry.find('title').text()
-                    settingsAboutChangelogText.innerHTML = entry.find('content').text()
-                    settingsAboutChangelogButton.href = entry.find('link').attr('href')
-                }
-            }
-
-        },
-        timeout: 2500
-    }).catch(err => {
-        settingsAboutChangelogText.innerHTML = 'Failed to load release notes.'
-    })
-}
 
 /**
  * Prepare account tab for display.
@@ -1497,9 +833,6 @@ const settingsUpdateTitle          = document.getElementById('settingsUpdateTitl
 const settingsUpdateVersionCheck   = document.getElementById('settingsUpdateVersionCheck')
 const settingsUpdateVersionTitle   = document.getElementById('settingsUpdateVersionTitle')
 const settingsUpdateVersionValue   = document.getElementById('settingsUpdateVersionValue')
-const settingsUpdateChangelogTitle = settingsTabUpdate.getElementsByClassName('settingsChangelogTitle')[0]
-const settingsUpdateChangelogText  = settingsTabUpdate.getElementsByClassName('settingsChangelogText')[0]
-const settingsUpdateChangelogCont  = settingsTabUpdate.getElementsByClassName('settingsChangelogContainer')[0]
 const settingsUpdateActionButton   = document.getElementById('settingsUpdateActionButton')
 
 /**
@@ -1524,10 +857,7 @@ function settingsUpdateButtonStatus(text, disabled = false, handler = null){
  */
 function populateSettingsUpdateInformation(data){
     if(data != null){
-        settingsUpdateTitle.innerHTML = `New ${isPrerelease(data.version) ? 'Pre-release' : 'Release'} Available`
-        settingsUpdateChangelogCont.style.display = null
-        settingsUpdateChangelogTitle.innerHTML = data.releaseName
-        settingsUpdateChangelogText.innerHTML = data.releaseNotes
+        settingsUpdateTitle.innerHTML = `New Release Available`
         populateVersionInformation(data.version, settingsUpdateVersionValue, settingsUpdateVersionTitle, settingsUpdateVersionCheck)
         
         if(process.platform === 'darwin'){
@@ -1539,13 +869,10 @@ function populateSettingsUpdateInformation(data){
         }
     } else {
         settingsUpdateTitle.innerHTML = 'You Are Running the Latest Version'
-        settingsUpdateChangelogCont.style.display = 'none'
         populateVersionInformation(remote.app.getVersion(), settingsUpdateVersionValue, settingsUpdateVersionTitle, settingsUpdateVersionCheck)
         settingsUpdateButtonStatus('Check for Updates', false, () => {
-            if(!isDev){
-                ipcRenderer.send('autoUpdateAction', 'checkForUpdate')
-                settingsUpdateButtonStatus('Checking for Updates..', true)
-            }
+            ipcRenderer.send('autoUpdateAction', 'checkForUpdate')
+            settingsUpdateButtonStatus('Checking for Updates..', true)
         })
     }
 }
@@ -1573,13 +900,10 @@ async function prepareSettings(first = false) {
         setupSettingsTabs()
         initSettingsValidators()
         prepareUpdateTab()
-    } else {
-        await prepareModsTab()
     }
     await initSettingsValues()
     prepareAccountsTab()
     await prepareJavaTab()
-    prepareAboutTab()
 }
 
 // Prepare the settings UI on startup.
