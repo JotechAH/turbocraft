@@ -242,10 +242,10 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
         // If the result is null, no valid Java installation was found.
         // Show this information to the user.
         setOverlayContent(
-            'No Compatible<br>Java Installation Found',
-            `In order to join Turbocraft, you need a 64-bit installation of Java ${effectiveJavaOptions.suggestedMajor}. Would you like us to install a copy?`,
-            'Install Java',
-            'Install Manually'
+            'Aucun java compatible trouvé',
+            `Vous avez besoin de JAVA 64bits ${effectiveJavaOptions.suggestedMajor}. Voulez-vous qu'on installe une copie?`,
+            'Installer',
+            'Manuellement'
         )
         setOverlayHandler(() => {
             setLaunchDetails('Preparing Java Download..')
@@ -262,9 +262,9 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
             $('#overlayContent').fadeOut(250, () => {
                 //$('#overlayDismiss').toggle(false)
                 setOverlayContent(
-                    'Java is Required<br>to Launch',
-                    'I Understand',
-                    'Go Back'
+                    'Java est requis<br>pour lancer',
+                    'Ok',
+                    'Retour'
                 )
                 setOverlayHandler(() => {
                     toggleLaunchArea(false)
