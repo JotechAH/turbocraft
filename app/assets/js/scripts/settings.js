@@ -857,7 +857,7 @@ function settingsUpdateButtonStatus(text, disabled = false, handler = null){
  */
 function populateSettingsUpdateInformation(data){
     if(data != null){
-        settingsUpdateTitle.innerHTML = `New Release Available`
+        settingsUpdateTitle.innerHTML = `Nouvelle mise à jour dispo`
         populateVersionInformation(data.version, settingsUpdateVersionValue, settingsUpdateVersionTitle, settingsUpdateVersionCheck)
         
         if(process.platform === 'darwin'){
@@ -868,9 +868,9 @@ function populateSettingsUpdateInformation(data){
             settingsUpdateButtonStatus('Downloading..', true)
         }
     } else {
-        settingsUpdateTitle.innerHTML = 'You Are Running the Latest Version'
+        settingsUpdateTitle.innerHTML = "T'as la dernière version"
         populateVersionInformation(remote.app.getVersion(), settingsUpdateVersionValue, settingsUpdateVersionTitle, settingsUpdateVersionCheck)
-        settingsUpdateButtonStatus('Check for Updates', false, () => {
+        settingsUpdateButtonStatus("Check s'il y a une update", false, () => {
             ipcRenderer.send('autoUpdateAction', 'checkForUpdate')
             settingsUpdateButtonStatus('Checking for Updates..', true)
         })

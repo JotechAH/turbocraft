@@ -35,12 +35,5 @@
         <%- include('landing') %>
     </div>
     <%- include('overlay') %>
-    
-    <script>
-        // Load language
-        for(let key of Object.keys(Lang.query('html'))){
-            document.getElementById(key).innerHTML = Lang.query(`html.${key}`)
-        }
-    </script>
 </body>
 </html>
